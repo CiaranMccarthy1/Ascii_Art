@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <limits>
+#include <ctype.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -11,6 +12,10 @@ const std::string GRADIENT = "@%#*+=-:. ";
 
 int outputWidth;
 int outputHeight;
+
+std::string rgbToAscii(unsigned char r, unsigned char g, unsigned char b) {
+    return "\033[38;2;" + std::to_string(r) + ";" + std::to_string(g) + ";" + std::to_string(b) + "m";
+}
 
 int getValidInput(const std::string& prompt) {
     int value;
@@ -40,21 +45,38 @@ bool fixAspectRatio(const std::string& prompt) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <image_path> [output_file.txt]\n";
+        std::cerr << "Usage: " << argv[0] << " <image_path> [output_file.txt] [-c]\n";
+        std::cerr << "Example: " << argv[0] << " photo.jpg -c\n";
         return 1;
     }
 
-    std::string imagePath = argv[1];
-    std::ofstream outFile;
+    std::string imagePath;
+    std::string outputFileName;
+    std::ofstream outputFile;
     bool toFile = false;
-    if (argc >= 3) {
-        outFile.open(argv[2]);
-        if (!outFile) {
-            std::cerr << "Failed to open output file: " << argv[2] << "\n";
-            return 1;
+    bool colourOutput = false;
+
+    for (int i = 1; i < argc; ++i) {  
+        std::string arg = argv[i];
+        if (arg == "-c") {
+            colourOutput = true;
+        } else if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".txt") {
+            outputFileName = arg;
+            toFile = true;
+        } else {
+            imagePath = arg;  
         }
-        toFile = true;
     }
+
+    if (toFile) {
+    outputFile.open(outputFileName.c_str());
+    if (!outputFile) {
+        std::cerr << "Failed to open output file: " << outputFileName << "\n";
+        return 1;
+    }
+}
+        
+
 
     outputWidth = getValidInput("Enter output width: ");
     outputHeight = getValidInput("Enter output height: ");
@@ -72,7 +94,7 @@ int main(int argc, char** argv) {
     double scaleX = static_cast<double>(width) / outputWidth;
     double scaleY = static_cast<double>(height) / outputHeight;
 
-    std::ostream& out = toFile ? outFile : std::cout;
+    std::ostream& out = toFile ? outputFile : std::cout;
 
     for (int y = 0; y < outputHeight; ++y) {
         int sy = std::min(height - 1, static_cast<int>((y + 0.5) * scaleY));
@@ -84,20 +106,22 @@ int main(int argc, char** argv) {
             unsigned char g = data[idx + 1];
             unsigned char b = data[idx + 2];
 
-            float grey = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            float grey = 0.28f * r + 0.65f * g + 0.07f * b;
             int charIndex = static_cast<int>((grey / 255.0f) * (GRADIENT.size() - 1));
             charIndex = std::clamp(charIndex, 0, static_cast<int>(GRADIENT.size() - 1));
 
-            std::cout << GRADIENT[charIndex];
-            if (toFile) outFile << GRADIENT[charIndex];
+            if (colourOutput)
+                out << rgbToAscii(r, g, b) << GRADIENT[charIndex];
+            else
+                out << GRADIENT[charIndex];
         }
         std::cout << "\n";
-        if (toFile) outFile << "\n";
+        if (toFile) outputFile << "\n";
     }
 
     stbi_image_free(data);
     if (toFile) {
-        outFile.close();
+        outputFile.close();
         std::cout << "ASCII art saved to: " << argv[2] << "\n";
     }
 
